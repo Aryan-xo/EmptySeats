@@ -215,10 +215,12 @@ export async function coachesDirect(q: {
   trainSourceStation: string
   jDate: string
   coaches: { coach: string; cls: string }[]
-}): Promise<{ details: Record<string, CoachDetail>; errors: Record<string, string> }> {
+}, onProgress?: (done: number, total: number) => void): Promise<{ details: Record<string, CoachDetail>; errors: Record<string, string> }> {
   const details: Record<string, CoachDetail> = {}
   const errors: Record<string, string> = {}
   const { coaches, ...base } = q
+  const tick = () => onProgress?.(Object.keys(details).length, coaches.length)
+  tick()
   const run = async (list: { coach: string; cls: string }[], workers: number) => {
     const queue = [...list]
     await Promise.all(
@@ -227,6 +229,7 @@ export async function coachesDirect(q: {
           try {
             details[c.coach] = (await post<CoachDetail>('coachComposition', { ...base, coach: c.coach, cls: c.cls })).value
             delete errors[c.coach]
+            tick()
           } catch (e) {
             errors[c.coach] = (e as Error).message
           }

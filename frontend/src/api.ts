@@ -72,9 +72,9 @@ export const api = {
     cls: string
     offline?: boolean
   }) => req<CoachDetail>('/api/coach', q),
-  coaches: (q: CoachesQuery) =>
+  coaches: (q: CoachesQuery, onProgress?: (done: number, total: number) => void) =>
     !q.offline && source === 'browser'
-      ? coachesDirect(q)
+      ? coachesDirect(q, onProgress)
       : req<{ details: Record<string, CoachDetail>; errors: Record<string, string> }>('/api/coaches', q),
   importHar: (harText: string) =>
     req<{

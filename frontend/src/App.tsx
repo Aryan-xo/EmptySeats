@@ -5,6 +5,7 @@ import type { Interval } from './logic'
 import { CLASS_NAMES, berthStatus, buildModel, parseCoachDetail } from './logic'
 import { stationName } from './stations'
 import { SearchForm, type Recent } from './components/SearchForm'
+import { SearchSummary } from './components/SearchSummary'
 import { TrainStrip } from './components/TrainStrip'
 import { CoachMap } from './components/CoachMap'
 import { BerthPanel } from './components/BerthPanel'
@@ -88,6 +89,8 @@ export default function App() {
   const [route, setRoute] = useState<string[] | null>(null)
   const [details, setDetails] = useState<Record<string, CoachDetail>>({})
   const [routeLoading, setRouteLoading] = useState(false)
+  const [routeProgress, setRouteProgress] = useState<{ done: number; total: number } | null>(null)
+  const [editing, setEditing] = useState(false)
   const [coach, setCoach] = useState<string | null>(null)
   const [berthNo, setBerthNo] = useState<number | null>(null)
   const [from, setFrom] = useState('')
@@ -113,6 +116,7 @@ export default function App() {
         setSource(getSource())
         setChart(res)
         setQuery(q)
+        setEditing(false)
         setRoute(getLS<string[] | null>(`route:${q.trainNo}`, null))
         if (!opts.keepSelection) {
           setDetails({})
@@ -152,10 +156,13 @@ export default function App() {
             jDate: c.trainStartDate,
             coaches: c.cdd.map((x) => ({ coach: x.coachName, cls: x.classCode })),
             offline: useOffline,
-          })
+          }, (done, total) => setRouteProgress({ done, total }))
           .then((r) => setDetails((prev) => ({ ...prev, ...r.details })))
           .catch(() => {})
-          .finally(() => setRouteLoading(false))
+          .finally(() => {
+            setRouteLoading(false)
+            setRouteProgress(null)
+          })
       } catch (e) {
         setError((e as Error).message)
       } finally {
@@ -301,23 +308,41 @@ export default function App() {
         <div className="hero-inner">
           {!chart && (
             <div className="hero-copy">
-              <span className="hero-kicker">✨ Seats open up after the chart is prepared</span>
+              <span className="hero-kicker">🎫 Waiting list ticket confirm nahi hua? Don't give up yet.</span>
               <h1>
-                Find an <em>empty berth</em> on your train,
-                <br /> from exactly where you board.
+                Find the <em>empty berths</em> left
+                <br /> after the chart is prepared.
               </h1>
               <p>
-                Live IRCTC reservation charts, laid out coach by coach. See every free berth for your trip, or let us
-                chain berths together for a split journey.
+                Cancellations and no-shows leave berths empty once IRCTC charts a train. See every one, coach by coach,
+                and exactly which stretch of the route it's free for, from <b>your</b> station to <b>yours</b>.
               </p>
+              <div className="hero-classes" aria-label="Classes covered">
+                <span className="hc-label">Every coach</span>
+                {['1A', '2A', '3A', '3E', 'SL', 'CC', '2S'].map((c) => (
+                  <span key={c} className={`hc-chip cls-${c}`}>
+                    {c}
+                  </span>
+                ))}
+              </div>
               <div className="hero-points">
-                <span>🛤️ Exact route</span>
-                <span>🔀 Split-journey finder</span>
-                <span>🏷️ Quotas & berth types</span>
-                <span>📍 9,000 station names</span>
+                <span>🛤️ Free from your stop to your stop</span>
+                <span>🔀 No single berth? Hop between two</span>
+                <span>⚡ Free, no login</span>
               </div>
             </div>
           )}
+          {chart && !editing ? (
+            <SearchSummary
+              trainNo={query.trainNo}
+              trainName={chart.composition.trainName}
+              jDate={query.jDate}
+              from={query.boardingStation}
+              to={query.to}
+              loading={loading}
+              onEdit={() => setEditing(true)}
+            />
+          ) : (
           <SearchForm
             key={`${query.trainNo}|${query.jDate}|${query.boardingStation}|${query.to ?? ''}`}
             trains={trains}
@@ -331,6 +356,7 @@ export default function App() {
             onSubmit={(q) => load(q)}
             onImport={onImport}
           />
+          )}
         </div>
       </header>
 
@@ -389,13 +415,29 @@ export default function App() {
               </button>
             </div>
             {(comp._stale || Object.keys(chart.errors).length > 0) && (
-              <p className="warn small th-warn">
-                {comp._stale && 'Showing saved data, IRCTC is not responding. '}
-                {Object.keys(chart.errors).length > 0 &&
-                  `Couldn't load: ${Object.entries(chart.errors)
-                    .map(([k, v]) => `${k} (${v})`)
-                    .join(', ')}`}
-              </p>
+              <div
+                className="th-warn"
+                title={Object.entries(chart.errors)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join('\n')}
+              >
+                <span className="th-warn-icon" aria-hidden>!</span>
+                <span>
+                  {comp._stale && (
+                    <>
+                      <b>Saved data from {fmtChart(chart.fetchedAt)}.</b> IRCTC isn't responding right now.{' '}
+                    </>
+                  )}
+                  {Object.keys(chart.errors).length > 0 && (
+                    <>
+                      Couldn't load <b>{Object.keys(chart.errors).sort().join(', ')}</b>, so those coaches may look full.
+                    </>
+                  )}
+                </span>
+                <button className="th-warn-retry" onClick={() => load(query, { keepSelection: true })} disabled={loading}>
+                  {loading ? <span className="spinner dark" /> : 'Retry'}
+                </button>
+              </div>
             )}
           </section>
 
@@ -407,6 +449,7 @@ export default function App() {
                 to={to}
                 wantedTo={query.to ?? ''}
                 routeLoading={routeLoading}
+                routeProgress={routeProgress}
                 classFilter={classFilter}
                 span={span}
                 onFrom={(s) => {

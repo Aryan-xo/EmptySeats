@@ -140,7 +140,7 @@ function Showcase({ onStart }: { onStart: () => void }) {
 
       <div className="center cta-row">
         <button className="primary big cta" onClick={onStart}>
-          Try it with your train →
+          Check my train for empty berths →
         </button>
       </div>
     </section>

@@ -11,6 +11,7 @@ interface Props {
   to: string
   wantedTo: string
   routeLoading: boolean
+  routeProgress?: { done: number; total: number } | null
   classFilter: Set<string>
   span: Interval | null
   onFrom: (s: string) => void
@@ -59,7 +60,7 @@ export function TripPanel(p: Props) {
     <section className="card trip">
       <div className="trip-head">
         <h3>Your trip</h3>
-        <RouteBadge source={model.routeSource} loading={p.routeLoading} count={model.stations.length} />
+        <RouteBadge source={model.routeSource} loading={p.routeLoading} progress={p.routeProgress ?? null} count={model.stations.length} />
       </div>
 
       <div className="trip-pick">
@@ -221,11 +222,31 @@ export function TripPanel(p: Props) {
   )
 }
 
-function RouteBadge({ source, loading, count }: { source: Model['routeSource']; loading: boolean; count: number }) {
+function RouteBadge({
+  source,
+  loading,
+  progress,
+  count,
+}: {
+  source: Model['routeSource']
+  loading: boolean
+  progress: { done: number; total: number } | null
+  count: number
+}) {
   if (loading && source === 'guess')
     return (
-      <span className="badge">
-        <span className="spinner dark" /> Working out exact stops…
+      <span className="badge route-progress" title="Reading every coach's chart to get the exact stop order">
+        <span className="spinner dark" /> Working out exact stops
+        {progress && progress.total > 0 && (
+          <>
+            <span className="rp-count">
+              {progress.done}/{progress.total}
+            </span>
+            <span className="rp-bar" aria-hidden>
+              <span style={{ width: `${(100 * progress.done) / progress.total}%` }} />
+            </span>
+          </>
+        )}
       </span>
     )
   const text = {

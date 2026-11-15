@@ -134,7 +134,7 @@ export function SearchForm(p: Props) {
         <div className="f-go">
           <button type="submit" className="primary big" disabled={p.loading}>
             {p.loading ? <span className="spinner" /> : null}
-            {p.loading ? 'Loading' : 'Find seats'}
+            {p.loading ? 'Searching…' : 'Find empty berths'}
           </button>
         </div>
       </div>
