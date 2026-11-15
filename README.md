@@ -12,11 +12,22 @@ Tap any berth to see which stretches of the route it's free on.
 ![Vite](https://img.shields.io/badge/build-Vite-646cff?logo=vite)
 ![Vercel](https://img.shields.io/badge/deploy-Vercel-black?logo=vercel)
 
+### 🌐 [**Try it live →**](https://YOUR-APP.vercel.app) &nbsp;·&nbsp; [Features](#features) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Run locally](#run-locally)
+
+<!-- LIVE_URL: replace https://YOUR-APP.vercel.app above (and in "Live demo" below) with your deployed URL -->
+
 <img src="docs/home.png" alt="EmptySeats homepage" width="860" />
 
 </div>
 
 ---
+
+## Live demo
+
+👉 **https://YOUR-APP.vercel.app** &nbsp;_(deploying soon)_
+
+Try a train whose chart is already out (charts appear about 4 hours before departure), for example any
+long-distance train leaving in the next few hours.
 
 ## Why
 
