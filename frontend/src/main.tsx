@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import './index.css'
 import App from './App.tsx'
 
@@ -9,5 +10,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
     {/* Vercel Web Analytics: page views + visitors. No-op when not deployed on Vercel. */}
     <Analytics />
+    {/* Vercel Speed Insights: real-user Core Web Vitals. No-op when not deployed on Vercel. */}
+    <SpeedInsights />
   </StrictMode>,
 )
