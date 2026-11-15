@@ -1961,3 +1961,26 @@ button.cta {
     scroll-behavior: auto;
   }
 }
+.retry-btn {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.retry-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+.retry-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

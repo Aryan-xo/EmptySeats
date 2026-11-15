@@ -204,7 +204,7 @@ function Faq() {
   const qs = [
     [
       'When do charts become available?',
-      'IRCTC prepares the first chart about 4 hours before the train leaves its charting station, and a second (final) chart roughly 30 minutes before. Before that there is nothing to show.',
+      'IRCTC prepares the first chart the night before (around 8 PM, 9 PM in some zones) for trains leaving between 5 AM and 2 PM, and about 10 hours before departure for all other trains. The final chart comes 30 minutes before departure. Before that there is nothing to show.',
     ],
     [
       'Can I book a berth I see here?',

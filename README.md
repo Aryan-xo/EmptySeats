@@ -25,7 +25,7 @@ Tap any berth to see which stretches of the route it's free on.
 
 👉 **https://emptyseats.vercel.app** 
 
-Try a train whose chart is already out (charts appear about 4 hours before departure), for example any
+Try a train whose chart is already out (see [chart timings](#limits--honest-caveats)), for example any
 long-distance train leaving in the next few hours.
 
 ## Why
@@ -132,8 +132,10 @@ from the repo root. See **Limits** below before relying on it in production.
 
 ## Limits & honest caveats
 
-- **Charts only exist after IRCTC prepares them:** roughly 4 hours before departure (chart 1) and ~30 min before
-  (chart 2).
+- **Charts only exist after IRCTC prepares them:** 
+  - **First chart:** the night before (around 8 PM, 9 PM in some zones) for trains leaving between 5 AM and 2 PM;
+    about 10 hours before departure for all other trains.
+  - **Final chart:** 30 minutes before departure.
 - **Stations where no berth changes hands don't appear on the route.** If your stop is missing, pick the next one
   after it.
 - **IRCTC blocks cloud IPs (403).** So the hosted site fetches charts from the **visitor's browser**: IRCTC's chart API

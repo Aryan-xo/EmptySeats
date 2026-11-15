@@ -56,12 +56,12 @@ function friendlyError(msg: string): { title: string; body: string } {
   if (m.includes('no record') || m.includes('not prepared') || m.includes('chart'))
     return {
       title: "This train's chart isn't available yet",
-      body: 'IRCTC publishes charts about 4 hours before departure (the first chart) and again ~30 min before. Check the date: use the date the train leaves your boarding station.',
+      body: 'First chart: the night before (around 8 PM) for trains leaving between 5 AM and 2 PM, otherwise about 10 hours before departure. Final chart: 30 min before departure. Check the date: use the date the train leaves your boarding station.',
     }
   if (m.includes('403') || m.includes('forbidden') || m.includes('refused this server'))
     return {
       title: 'IRCTC blocked the request',
-      body: 'IRCTC refused both your browser and our server. Try again in a minute, check that you are online, or switch networks (e.g. mobile data).',
+      body: 'IRCTC is turning requests away right now (it does this in bursts). We already retried a few times. Wait a minute and try again, or switch networks (e.g. Wi-Fi to mobile data).',
     }
   if (m.includes('http2') || m.includes('empty response') || m.includes('error sending request'))
     return {
@@ -94,6 +94,7 @@ export default function App() {
   const [to, setTo] = useState('')
   const [classFilter, setClassFilter] = useState<Set<string>>(new Set())
   const autoPick = useRef(false)
+  const lastTried = useRef<ChartQuery | null>(null)
 
   useEffect(() => {
     api.trains().then(setTrains).catch(() => setTrains([]))
@@ -102,6 +103,7 @@ export default function App() {
   const load = useCallback(
     async (q: ChartQuery, opts: { keepSelection?: boolean } = {}) => {
       if (!q.trainNo || !q.boardingStation) return
+      lastTried.current = q
       const useOffline = q.offline ?? offline
       setLoading(true)
       setError(null)
@@ -151,7 +153,7 @@ export default function App() {
             coaches: c.cdd.map((x) => ({ coach: x.coachName, cls: x.classCode })),
             offline: useOffline,
           })
-          .then((r) => setDetails(r.details))
+          .then((r) => setDetails((prev) => ({ ...prev, ...r.details })))
           .catch(() => {})
           .finally(() => setRouteLoading(false))
       } catch (e) {
@@ -340,6 +342,11 @@ export default function App() {
             <b>{err.title}</b>
             <p>{err.body}</p>
             {err.body !== error && <p className="muted tiny">Details: {error}</p>}
+            {lastTried.current && (
+              <button className="retry-btn" onClick={() => lastTried.current && load(lastTried.current, { keepSelection: !!chart })} disabled={loading}>
+                {loading ? <span className="spinner dark" /> : 'Try again'}
+              </button>
+            )}
           </div>
         </div>
       )}
