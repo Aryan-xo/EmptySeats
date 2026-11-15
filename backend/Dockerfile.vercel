@@ -1,0 +1,16 @@
+# Rust API for Vercel (container service). Frontend is served separately by Vercel.
+FROM rust:1-slim-bookworm AS build
+WORKDIR /app
+# Cache dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo 'fn main() {}' > src/main.rs && cargo build --release && rm -rf src
+COPY data ./data
+COPY src ./src
+RUN touch src/main.rs && cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/target/release/railway-seats /usr/local/bin/railway-seats
+ENV HOST=0.0.0.0 PORT=80 RUST_LOG=railway_seats=info
+EXPOSE 80
+CMD ["railway-seats"]
