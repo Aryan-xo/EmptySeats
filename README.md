@@ -12,9 +12,8 @@ Tap any berth to see which stretches of the route it's free on.
 ![Vite](https://img.shields.io/badge/build-Vite-646cff?logo=vite)
 ![Vercel](https://img.shields.io/badge/deploy-Vercel-black?logo=vercel)
 
-### 🌐 [**Try it live →**](https://YOUR-APP.vercel.app) &nbsp;·&nbsp; [Features](#features) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Run locally](#run-locally)
+### 🌐 [**Try it live →**](https://emptyseats.vercel.app) &nbsp;·&nbsp; [Features](#features) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Run locally](#run-locally)
 
-<!-- LIVE_URL: replace https://YOUR-APP.vercel.app above (and in "Live demo" below) with your deployed URL -->
 
 <img src="docs/home.png" alt="EmptySeats homepage" width="860" />
 
@@ -24,7 +23,7 @@ Tap any berth to see which stretches of the route it's free on.
 
 ## Live demo
 
-👉 **https://YOUR-APP.vercel.app** &nbsp;_(deploying soon)_
+👉 **https://emptyseats.vercel.app** 
 
 Try a train whose chart is already out (charts appear about 4 hours before departure), for example any
 long-distance train leaving in the next few hours.
@@ -137,8 +136,8 @@ from the repo root. See **Limits** below before relying on it in production.
   (chart 2).
 - **Stations where no berth changes hands don't appear on the route.** If your stop is missing, pick the next one
   after it.
-- **IRCTC may block cloud IPs.** If live fetching fails from a server, use HAR import, or run the backend somewhere
-  with an Indian residential/business IP.
+- **IRCTC blocks cloud IPs (403).** So the hosted site fetches charts from the **visitor's browser**: IRCTC's chart API
+  allows cross-origin requests. The Rust backend is the automatic fallback, and is used locally and for HAR import.
 - **The cache is per instance** (in memory), and HAR import is meant for local use. On serverless hosts, requests
   over 4.5 MB are rejected.
 - Station names come from the open [datameet/railways](https://github.com/datameet/railways) dataset, plus manual
