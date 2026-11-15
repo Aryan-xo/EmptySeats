@@ -163,6 +163,11 @@ async fn fetch(client: &reqwest::Client, endpoint: &str, body: &Value) -> anyhow
         .send()
         .await?;
     let status = resp.status();
+    if status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!(
+            "IRCTC refused this server (HTTP 403). Its CDN often blocks cloud/datacenter IPs."
+        );
+    }
     let text = resp.text().await?;
     if text.trim().is_empty() {
         anyhow::bail!(

@@ -1,4 +1,25 @@
 import type { ChartQuery, ChartResponse, CoachDetail, Train } from './types'
+import { chartDirect, coachesDirect } from './irctc'
+
+/**
+ * Where live chart data comes from:
+ * - 'browser': the visitor's browser calls IRCTC directly (works when hosted on cloud IPs IRCTC blocks)
+ * - 'server':  our Rust backend calls IRCTC (works locally; needed for HAR/offline data)
+ * We try the browser first, and fall back to the server once if it fails.
+ */
+export type Source = 'browser' | 'server'
+let source: Source | null = null
+export const getSource = () => source
+
+type CoachesQuery = {
+  trainNo: string
+  boardingStation: string
+  remoteStation: string
+  trainSourceStation: string
+  jDate: string
+  coaches: { coach: string; cls: string }[]
+  offline?: boolean
+}
 
 async function req<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -22,7 +43,25 @@ async function req<T>(path: string, body?: unknown): Promise<T> {
 
 export const api = {
   trains: () => req<Train[]>('/api/trains'),
-  chart: (q: ChartQuery) => req<ChartResponse>('/api/chart', q),
+  chart: async (q: ChartQuery): Promise<ChartResponse> => {
+    if (q.offline) return req<ChartResponse>('/api/chart', q)
+    if (source !== 'server') {
+      try {
+        const res = await chartDirect(q)
+        source = 'browser'
+        return res
+      } catch (e) {
+        console.info('[EmptySeats] direct IRCTC fetch failed, using server:', e)
+      }
+    }
+    try {
+      const res = await req<ChartResponse>('/api/chart', q)
+      source = 'server'
+      return res
+    } catch (e) {
+      throw new Error(`${(e as Error).message} (tried your browser and our server)`)
+    }
+  },
   coach: (q: {
     trainNo: string
     boardingStation: string
@@ -33,15 +72,10 @@ export const api = {
     cls: string
     offline?: boolean
   }) => req<CoachDetail>('/api/coach', q),
-  coaches: (q: {
-    trainNo: string
-    boardingStation: string
-    remoteStation: string
-    trainSourceStation: string
-    jDate: string
-    coaches: { coach: string; cls: string }[]
-    offline?: boolean
-  }) => req<{ details: Record<string, CoachDetail>; errors: Record<string, string> }>('/api/coaches', q),
+  coaches: (q: CoachesQuery) =>
+    !q.offline && source === 'browser'
+      ? coachesDirect(q)
+      : req<{ details: Record<string, CoachDetail>; errors: Record<string, string> }>('/api/coaches', q),
   importHar: (harText: string) =>
     req<{
       imported: Record<string, number>

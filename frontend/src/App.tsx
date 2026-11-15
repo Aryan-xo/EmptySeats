@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api } from './api'
+import { api, getSource, type Source } from './api'
 import type { ChartQuery, ChartResponse, CoachDetail, Train } from './types'
 import type { Interval } from './logic'
 import { CLASS_NAMES, berthStatus, buildModel, parseCoachDetail } from './logic'
@@ -58,6 +58,11 @@ function friendlyError(msg: string): { title: string; body: string } {
       title: "This train's chart isn't available yet",
       body: 'IRCTC publishes charts about 4 hours before departure (the first chart) and again ~30 min before. Check the date: use the date the train leaves your boarding station.',
     }
+  if (m.includes('403') || m.includes('forbidden') || m.includes('refused this server'))
+    return {
+      title: 'IRCTC blocked the request',
+      body: 'IRCTC refused both your browser and our server. Try again in a minute, check that you are online, or switch networks (e.g. mobile data).',
+    }
   if (m.includes('http2') || m.includes('empty response') || m.includes('error sending request'))
     return {
       title: "IRCTC didn't answer",
@@ -77,6 +82,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [offline, setOffline] = useState(() => readUrl().offline ?? false)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [source, setSource] = useState<Source | null>(null)
   const [recent, setRecent] = useState<Recent[]>(() => getLS('recent', []))
 
   const [route, setRoute] = useState<string[] | null>(null)
@@ -102,6 +108,7 @@ export default function App() {
       try {
         const res = await api.chart({ ...q, offline: useOffline })
         if (res.error) throw new Error(res.error)
+        setSource(getSource())
         setChart(res)
         setQuery(q)
         setRoute(getLS<string[] | null>(`route:${q.trainNo}`, null))
@@ -265,7 +272,15 @@ export default function App() {
                 <a href="#faq">FAQ</a>
               </>
             )}
-            <span className={`live-pill ${offline ? 'off' : ''}`} title={offline ? 'Using imported HAR data' : 'Fetching live charts from IRCTC'}>
+            <span className={`live-pill ${offline ? 'off' : ''}`} title={
+                offline
+                  ? 'Using imported HAR data'
+                  : source === 'browser'
+                    ? 'Charts are fetched by your browser straight from IRCTC'
+                    : source === 'server'
+                      ? 'Charts are fetched by the EmptySeats server'
+                      : 'Fetching live charts from IRCTC'
+              }>
               <span className="live-dot" /> {offline ? 'Offline data' : 'Live IRCTC charts'}
             </span>
           </div>

@@ -716,6 +716,7 @@ span.chip {
 
 /* ---------- train strip ---------- */
 .strip-wrap {
+  position: relative;
   overflow-x: auto;
   padding-bottom: 8px;
   scrollbar-width: thin;

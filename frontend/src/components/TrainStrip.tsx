@@ -15,9 +15,10 @@ export function TrainStrip({ model, span, classFilter, selected, onSelect }: Pro
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    ref.current
-      ?.querySelector('.coach.sel')
-      ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    // Scroll the strip sideways only; scrollIntoView would also scroll the whole page.
+    const wrap = ref.current
+    const el = wrap?.querySelector<HTMLElement>('.coach.sel')
+    if (wrap && el) wrap.scrollTo({ left: el.offsetLeft - wrap.clientWidth / 2 + el.clientWidth / 2, behavior: 'smooth' })
   }, [selected])
 
   return (
