@@ -1,5 +1,5 @@
 import type { ChartQuery, ChartResponse, CoachDetail, Train } from './types'
-import { chartDirect, coachesDirect } from './irctc'
+import { chartDirect, coachesDirect, IrctcPausedError } from './irctc'
 
 /**
  * Where live chart data comes from:
@@ -45,12 +45,14 @@ export const api = {
   trains: () => req<Train[]>('/api/trains'),
   chart: async (q: ChartQuery): Promise<ChartResponse> => {
     if (q.offline) return req<ChartResponse>('/api/chart', q)
+    let browserErr: unknown = null
     if (source !== 'server') {
       try {
         const res = await chartDirect(q)
         source = 'browser'
         return res
       } catch (e) {
+        browserErr = e
         console.info('[EmptySeats] direct IRCTC fetch failed, using server:', e)
       }
     }
@@ -59,6 +61,8 @@ export const api = {
       source = 'server'
       return res
     } catch (e) {
+      // Your network is blocked: say that, not the server's (expected) cloud-IP refusal.
+      if (browserErr instanceof IrctcPausedError) throw browserErr
       throw new Error(`${(e as Error).message} (tried your browser and our server)`)
     }
   },
@@ -72,9 +76,13 @@ export const api = {
     cls: string
     offline?: boolean
   }) => req<CoachDetail>('/api/coach', q),
-  coaches: (q: CoachesQuery, onProgress?: (done: number, total: number) => void) =>
+  coaches: (
+    q: CoachesQuery,
+    onProgress?: (done: number, total: number) => void,
+    onCoach?: (coach: string, detail: CoachDetail) => void,
+  ) =>
     !q.offline && source === 'browser'
-      ? coachesDirect(q, onProgress)
+      ? coachesDirect(q, onProgress, onCoach)
       : req<{ details: Record<string, CoachDetail>; errors: Record<string, string> }>('/api/coaches', q),
   importHar: (harText: string) =>
     req<{

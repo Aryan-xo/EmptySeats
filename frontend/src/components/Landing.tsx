@@ -174,7 +174,7 @@ function HowItWorks() {
 
 function Features() {
   const list = [
-    ['🛤️', 'Exact stop-by-stop route', 'Built from every coach’s chart, so “free from A to B” is accurate to the station.'],
+    ['🛤️', 'Exact stop-by-stop route', 'Built from IRCTC’s charts and the timetable, so “free from A to B” is accurate to the station.'],
     ['🔀', 'Split-journey finder', 'No single berth free the whole way? We chain berths with the fewest changes.'],
     ['🏷️', 'Quotas & berth types', 'Lower, upper, side berths, and the quota each booked stretch belongs to.'],
     ['🔎', 'Forgiving search', 'Find stations by name, code, old name, or with typos: “bombay”, “nasik raod”.'],

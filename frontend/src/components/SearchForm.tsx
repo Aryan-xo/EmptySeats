@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChartQuery, Train } from '../types'
 import { searchStations, stationName } from '../stations'
+import { rankStations } from '../fuzzy'
+import { knownRoute, type KnownRoute } from '../routes'
 import { Combo, type ComboItem } from './Combo'
 
 export interface Recent {
@@ -56,6 +58,49 @@ export function SearchForm(p: Props) {
   }, [train, p.trains])
 
   const picked = p.trains.find((t) => t.number === train.trim())
+
+  // The train's own stops (exact from an earlier search, or the timetable), to narrow From / To.
+  const [route, setRoute] = useState<{ train: string; r: KnownRoute } | null>(null)
+  const [allStations, setAllStations] = useState(false)
+  useEffect(() => {
+    const t = train.trim()
+    let live = true
+    knownRoute(t).then((r) => live && setRoute(r ? { train: t, r } : null))
+    return () => {
+      live = false
+    }
+  }, [train])
+  const stops = route && route.train === train.trim() && !allStations ? route.r : null
+
+  const entries = useMemo(
+    (): [string, string][] => (stops ? stops.stations.map((c) => [c, stationName(c) || c]) : []),
+    [stops],
+  )
+  const fromIdx = stops ? stops.stations.indexOf(from.trim().toUpperCase()) : -1
+  const toEntries = useMemo(() => (fromIdx >= 0 ? entries.slice(fromIdx + 1) : entries), [entries, fromIdx])
+
+  const toItem = ([code, name]: [string, string]): ComboItem => ({
+    value: code,
+    primary: code,
+    secondary: name,
+    index: String(entries.findIndex((e) => e[0] === code) + 1),
+  })
+  const routeItems = (q: string, list: [string, string][]) =>
+    q.trim() ? rankStations(q, list, 12).map(toItem) : list.map(toItem)
+  const fromItems = stops ? routeItems(from, entries.slice(0, -1)) : stationItems(from)
+  const toItems = stops ? routeItems(to, toEntries) : stationItems(to)
+  const fromBrowse = stops ? entries.slice(0, -1).map(toItem) : undefined
+  const toBrowse = stops ? toEntries.map(toItem) : undefined
+
+  const routeKnown = !!(route && route.train === train.trim())
+  const footer = !routeKnown
+    ? undefined
+    : allStations
+      ? { label: `↩ Only show this train's ${route!.r.stations.length} stops`, onClick: () => setAllStations(false) }
+      : { label: 'Station not listed? Search all stations', onClick: () => setAllStations(true) }
+  const routeHint = stops
+    ? `${stops.stations.length} stops · ${stops.source === 'exact' ? 'exact route' : 'from timetable, may be dated'}`
+    : ''
   const submit = (q: ChartQuery) => p.onSubmit(q)
 
   return (
@@ -71,7 +116,10 @@ export function SearchForm(p: Props) {
           <span>Train</span>
           <Combo
             value={train}
-            onChange={setTrain}
+            onChange={(v) => {
+              setTrain(v)
+              setAllStations(false)
+            }}
             items={trainItems}
             placeholder="Number or name"
             required
@@ -109,13 +157,22 @@ export function SearchForm(p: Props) {
           <Combo
             value={from}
             onChange={setFrom}
-            items={stationItems(from)}
-            placeholder="Station or code"
+            items={fromItems}
+            browseItems={fromBrowse}
+            footer={footer}
+            placeholder={stops ? 'Pick a stop' : 'Station or code'}
             required
             uppercase
-            onPick={(it) => setFrom(it.value)}
+            onPick={(it) => {
+              setFrom(it.value)
+              // Keep To only if it still comes after the new From.
+              if (stops && to) {
+                const s = stops.stations
+                if (s.indexOf(to.trim().toUpperCase()) <= s.indexOf(it.value)) setTo('')
+              }
+            }}
           />
-          <small className="hint">{stationName(from) || ' '}</small>
+          <small className="hint">{stationName(from) || routeHint || ' '}</small>
         </label>
 
         <label className="field f-stn">
@@ -123,7 +180,9 @@ export function SearchForm(p: Props) {
           <Combo
             value={to}
             onChange={setTo}
-            items={stationItems(to)}
+            items={toItems}
+            browseItems={toBrowse}
+            footer={footer}
             placeholder="Optional"
             uppercase
             onPick={(it) => setTo(it.value)}

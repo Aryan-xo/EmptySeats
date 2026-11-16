@@ -51,14 +51,34 @@ async function pace() {
   if (start > now) await sleep(start - now)
 }
 
+// ---- circuit breaker: when IRCTC is blocking this network, stop asking for a while -------------
+// Retrying into a block only extends it. After a few refusals in a row we pause all requests
+// (1 min, doubling up to 8 min if it keeps happening) and answer from saved data where we can.
+const STRIKES_TO_PAUSE = 3
+let strikes = 0
+let pauses = 0
+let pausedUntil = 0
+
+/** Milliseconds until requests to IRCTC resume (0 = not paused). */
+export const pausedFor = () => Math.max(0, pausedUntil - Date.now())
+
 function refused(retryAfterMs?: number) {
   gap = Math.min(MAX_GAP, gap * 2)
   coolUntil = Math.max(coolUntil, Date.now() + (retryAfterMs ?? jitter(2000)))
+  if (++strikes >= STRIKES_TO_PAUSE) {
+    pausedUntil = Date.now() + Math.min(8, 2 ** pauses) * 60_000
+    pauses++
+    strikes = 0
+  }
 }
 
 function succeeded() {
   gap = Math.max(MIN_GAP, Math.round(gap * 0.8))
+  strikes = 0
+  pauses = 0
 }
+
+export class IrctcPausedError extends Error {}
 
 // ---- saved answers -----------------------------------------------------------------------
 function loadSaved<T>(key: string): { at: number; value: T } | null {
@@ -95,7 +115,15 @@ const retryable = (e: unknown) => {
 }
 
 async function once<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
+  const checkPaused = () => {
+    if (pausedFor() > 0)
+      throw new IrctcPausedError(
+        `IRCTC is blocking requests from this network; paused for ${Math.ceil(pausedFor() / 60_000)} min`,
+      )
+  }
+  checkPaused()
   await pace()
+  checkPaused()
   const res = await fetch(BASE + endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -118,7 +146,7 @@ async function fetchWithRetry<T>(endpoint: string, body: Record<string, unknown>
       return await once<T>(endpoint, body)
     } catch (e) {
       if (e instanceof TypeError) refused()
-      if (attempt >= RETRY_DELAYS.length || !retryable(e)) throw e
+      if (attempt >= RETRY_DELAYS.length || !retryable(e) || pausedFor() > 0) throw e
       await sleep(jitter(RETRY_DELAYS[attempt]))
     }
   }
@@ -215,7 +243,7 @@ export async function coachesDirect(q: {
   trainSourceStation: string
   jDate: string
   coaches: { coach: string; cls: string }[]
-}, onProgress?: (done: number, total: number) => void): Promise<{ details: Record<string, CoachDetail>; errors: Record<string, string> }> {
+}, onProgress?: (done: number, total: number) => void, onCoach?: (coach: string, detail: CoachDetail) => void): Promise<{ details: Record<string, CoachDetail>; errors: Record<string, string> }> {
   const details: Record<string, CoachDetail> = {}
   const errors: Record<string, string> = {}
   const { coaches, ...base } = q
@@ -229,6 +257,7 @@ export async function coachesDirect(q: {
           try {
             details[c.coach] = (await post<CoachDetail>('coachComposition', { ...base, coach: c.coach, cls: c.cls })).value
             delete errors[c.coach]
+            onCoach?.(c.coach, details[c.coach])
             tick()
           } catch (e) {
             errors[c.coach] = (e as Error).message

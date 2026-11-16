@@ -44,9 +44,10 @@ EmptySeats answers that question directly:
 |---|---|
 | 🎯 **Trip answer** | Enter *From → To* and see how many berths are free for the whole trip, grouped by coach |
 | 🔀 **Split-journey finder** | No single berth free all the way? It chains berths together with the fewest changes |
-| 🛤️ **Exact route** | Station order is rebuilt from every coach's chart, so "free from A to B" is accurate to the station |
+| 🛤️ **Exact route** | Station order comes from the vacancy and coach charts, with the timetable breaking ties, so "free from A to B" is accurate to the station |
 | 🚃 **Train & seat map** | Engine plus every coach, with real bay layouts (SL / 3A / 3E 8-berth bays, 2A, 1A cabins, chair-car rows) |
 | 🛏️ **Berth timeline** | Every stretch a berth is free or booked, with quota (General, Tatkal, Ladies…) and board / get-off markers |
+| 🚉 **Train-aware stations** | Pick a train and *From / To* offer only its stops, in order (▾ to browse); *To* lists only stops after *From* |
 | 🔎 **Fuzzy station search** | ~9,000 stations by name, code, old name or with typos: `bombay`, `nasik raod`, `pt deen` |
 | 📊 **Insights** | Vacancy per class, and the stations where seats open up |
 | 🔗 **Deep links** | `?train=12321&date=2026-11-15&from=GAYA&to=NK&coach=B1&berth=59` |
@@ -81,7 +82,7 @@ First-time visitors get a live, clickable demo running on sample data:
 |---|---|
 | `trainComposition` `{trainNo, jDate, boardingStation}` | Coaches, charting station, chart times |
 | `vacantBerth` `{…, cls, chartType}` | Vacant segments per berth, one call per class, in parallel |
-| `coachComposition` `{…, coach, cls}` | Each berth's full segment chain → exact station order + quotas |
+| `coachComposition` `{…, coach, cls}` | One coach's berth chains + quotas. Fetched only for the coach you open (plus 4 busy coaches when the train isn't in the timetable), so a search costs ~5 requests, not ~30 |
 
 The berth logic lives in [`frontend/src/logic.ts`](frontend/src/logic.ts):
 
@@ -140,8 +141,15 @@ from the repo root. See **Limits** below before relying on it in production.
   after it.
 - **IRCTC blocks cloud IPs (403).** So the hosted site fetches charts from the **visitor's browser**: IRCTC's chart API
   allows cross-origin requests. The Rust backend is the automatic fallback, and is used locally and for HAR import.
+- **IRCTC also rate-limits busy networks.** Too many requests and it refuses a connection for a few minutes. The app
+  keeps requests low (coach charts only on demand, cached answers) and, after repeated refusals, pauses for 1–8 minutes
+  instead of retrying into the block.
 - **The cache is per instance** (in memory), and HAR import is meant for local use. On serverless hosts, requests
   over 4.5 MB are rejected.
+- **Stops before a search** come from the exact route of an earlier search in your browser, or else from
+  `frontend/public/routes.json` (halts from the datameet/railways schedules, with renamed codes updated). That
+  timetable covers about 5,000 trains and can be out of date, so the station lists always offer *Search all
+  stations*.
 - Station names come from the open [datameet/railways](https://github.com/datameet/railways) dataset, plus manual
   fixes for renamed codes (CSMT, DDU, PCOI…). Unknown codes show as just the code.
 

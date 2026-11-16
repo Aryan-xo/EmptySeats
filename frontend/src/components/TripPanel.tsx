@@ -233,10 +233,10 @@ function RouteBadge({
   progress: { done: number; total: number } | null
   count: number
 }) {
-  if (loading && source === 'guess')
+  if (loading && source !== 'custom' && (!progress || progress.done < progress.total))
     return (
-      <span className="badge route-progress" title="Reading every coach's chart to get the exact stop order">
-        <span className="spinner dark" /> Working out exact stops
+      <span className="badge route-progress" title="Reading a few coach charts to work out the stop order">
+        <span className="spinner dark" /> Loading coach charts
         {progress && progress.total > 0 && (
           <>
             <span className="rp-count">
@@ -252,6 +252,7 @@ function RouteBadge({
   const text = {
     coaches: `✓ Exact route · ${count} stops`,
     schedule: `✓ Timetable route · ${count} stops`,
+    saved: `✓ Saved route · ${count} stops`,
     custom: `Your route · ${count} stops`,
     guess: `Estimated route · ${count} stops`,
   }[source]

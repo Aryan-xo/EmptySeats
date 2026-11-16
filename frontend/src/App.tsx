@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, getSource, type Source } from './api'
 import type { ChartQuery, ChartResponse, CoachDetail, Train } from './types'
+
+type CoachesQueryBase = {
+  trainNo: string
+  boardingStation: string
+  remoteStation: string
+  trainSourceStation: string
+  jDate: string
+  coaches: { coach: string; cls: string }[]
+}
 import type { Interval } from './logic'
 import { CLASS_NAMES, berthStatus, buildModel, parseCoachDetail } from './logic'
 import { stationName } from './stations'
 import { SearchForm, type Recent } from './components/SearchForm'
 import { SearchSummary } from './components/SearchSummary'
+import { knownRoute, saveExactRoute, type KnownRoute } from './routes'
 import { TrainStrip } from './components/TrainStrip'
 import { CoachMap } from './components/CoachMap'
 import { BerthPanel } from './components/BerthPanel'
@@ -52,12 +62,22 @@ function fmtChart(s?: string | null) {
   return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+const vacantCount = (res: ChartResponse, coach: string) =>
+  Object.values(res.vacant)
+    .flatMap((v) => v ?? [])
+    .filter((v) => v.coachName.trim() === coach).length
+
 function friendlyError(msg: string): { title: string; body: string } {
   const m = msg.toLowerCase()
   if (m.includes('no record') || m.includes('not prepared') || m.includes('chart'))
     return {
       title: "This train's chart isn't available yet",
       body: 'First chart: the night before (around 8 PM) for trains leaving between 5 AM and 2 PM, otherwise about 10 hours before departure. Final chart: 30 min before departure. Check the date: use the date the train leaves your boarding station.',
+    }
+  if (m.includes('blocking requests from this network'))
+    return {
+      title: 'IRCTC has paused requests from your network',
+      body: "Too many requests reached IRCTC from your connection, so it's refusing them for a few minutes. We've stopped asking for a bit so the block doesn't get longer. Try again in a few minutes, or switch networks (e.g. Wi-Fi to mobile data).",
     }
   if (m.includes('403') || m.includes('forbidden') || m.includes('refused this server'))
     return {
@@ -91,7 +111,55 @@ export default function App() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [routeProgress, setRouteProgress] = useState<{ done: number; total: number } | null>(null)
   const [editing, setEditing] = useState(false)
+  const [hint, setHint] = useState<KnownRoute | null>(null)
   const [coach, setCoach] = useState<string | null>(null)
+  const coachRef = useRef<string | null>(null)
+  useEffect(() => {
+    coachRef.current = coach
+  }, [coach])
+  // Coach charts are fetched on demand (one request each), not all ~25 up front: far fewer IRCTC requests,
+  // so far fewer 403s. ctx.gen ties responses to the search that asked for them.
+  const ctxRef = useRef<{ gen: number; base: Omit<CoachesQueryBase, 'coaches'>; offline: boolean } | null>(null)
+  const inflight = useRef(new Set<string>())
+  const [coachLoading, setCoachLoading] = useState<Set<string>>(new Set())
+  const [coachFailed, setCoachFailed] = useState<Set<string>>(new Set())
+
+  const fetchCoaches = useCallback((list: { coach: string; cls: string }[], forRoute = false) => {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    const gen = ctx.gen
+    const key = (c: string) => `${gen}:${c}`
+    const todo = list.filter((c) => !inflight.current.has(key(c.coach)))
+    if (!todo.length) return
+    const names = todo.map((c) => c.coach)
+    names.forEach((c) => inflight.current.add(key(c)))
+    const current = () => ctxRef.current?.gen === gen
+    setCoachLoading((s) => new Set([...s, ...names]))
+    setCoachFailed((s) => new Set([...s].filter((c) => !names.includes(c))))
+    if (forRoute) setRouteLoading(true)
+    api
+      .coaches(
+        { ...ctx.base, coaches: todo, offline: ctx.offline },
+        forRoute ? (done, total) => current() && setRouteProgress({ done, total }) : undefined,
+        (c, d) => current() && setDetails((prev) => ({ ...prev, [c]: d })),
+      )
+      .then((r) => {
+        if (!current()) return
+        setDetails((prev) => ({ ...prev, ...r.details }))
+        const failed = Object.keys(r.errors)
+        if (failed.length) setCoachFailed((s) => new Set([...s, ...failed]))
+      })
+      .catch(() => current() && setCoachFailed((s) => new Set([...s, ...names])))
+      .finally(() => {
+        names.forEach((c) => inflight.current.delete(key(c)))
+        if (!current()) return
+        setCoachLoading((s) => new Set([...s].filter((c) => !names.includes(c))))
+        if (forRoute) {
+          setRouteLoading(false)
+          setRouteProgress(null)
+        }
+      })
+  }, [])
   const [berthNo, setBerthNo] = useState<number | null>(null)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -110,8 +178,11 @@ export default function App() {
       const useOffline = q.offline ?? offline
       setLoading(true)
       setError(null)
+      // Look up the train's known stop order alongside the chart (instant if cached).
+      const hintP = knownRoute(q.trainNo).catch(() => null)
       try {
         const res = await api.chart({ ...q, offline: useOffline })
+        setHint(await hintP)
         if (res.error) throw new Error(res.error)
         setSource(getSource())
         setChart(res)
@@ -144,32 +215,42 @@ export default function App() {
           return next
         })
 
-        // Fetch every coach's chart in the background: exact route + quotas.
+        // Coach charts: the selected coach is fetched when it's opened (effect below). Up front we only fetch a
+        // few busy coaches when the stop order isn't known yet (train not in the timetable, never searched here).
         const c = res.composition
-        setRouteLoading(true)
-        api
-          .coaches({
+        ctxRef.current = {
+          gen: (ctxRef.current?.gen ?? 0) + 1,
+          base: {
             trainNo: c.trainNo || q.trainNo,
             boardingStation: q.boardingStation,
             remoteStation: c.remote,
             trainSourceStation: c.from,
             jDate: c.trainStartDate,
-            coaches: c.cdd.map((x) => ({ coach: x.coachName, cls: x.classCode })),
-            offline: useOffline,
-          }, (done, total) => setRouteProgress({ done, total }))
-          .then((r) => setDetails((prev) => ({ ...prev, ...r.details })))
-          .catch(() => {})
-          .finally(() => {
-            setRouteLoading(false)
-            setRouteProgress(null)
-          })
+          },
+          offline: useOffline,
+        }
+        setCoachLoading(new Set())
+        setCoachFailed(new Set())
+        const known = await hintP
+        if (opts.keepSelection) {
+          // Refresh: re-read only the coach on screen.
+          const sel = coachRef.current
+          const cls = c.cdd.find((x) => x.coachName === sel)?.classCode
+          if (sel && cls) fetchCoaches([{ coach: sel, cls }])
+        } else if (!known) {
+          const busiest = [...c.cdd]
+            .sort((a, b) => vacantCount(res, b.coachName) - vacantCount(res, a.coachName))
+            .slice(0, 4)
+            .map((x) => ({ coach: x.coachName, cls: x.classCode }))
+          fetchCoaches(busiest, true)
+        }
       } catch (e) {
         setError((e as Error).message)
       } finally {
         setLoading(false)
       }
     },
-    [offline],
+    [offline, fetchCoaches],
   )
 
   // Load from URL on first visit. Deep links: ?…&to=JBP&coach=M1&berth=51
@@ -201,7 +282,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const model = useMemo(() => (chart ? buildModel(chart, route, details) : null), [chart, route, details])
+  const model = useMemo(() => (chart ? buildModel(chart, route, details, hint) : null), [chart, route, details, hint])
+
+  // Once coach charts reveal the exact stop order, remember it so the search form can offer those stops next time.
+  useEffect(() => {
+    if (!routeLoading && hint?.source !== 'timetable' && Object.keys(details).length && model?.routeSource === 'coaches')
+      saveExactRoute(query.trainNo, model.stations)
+  }, [model, routeLoading, details, hint, query.trainNo])
+
+  // Fetch the open coach's chart (berth-by-berth bookings and quotas) when it's first shown.
+  useEffect(() => {
+    if (!coach || !chart || details[coach] || coachFailed.has(coach)) return
+    const cls = chart.composition.cdd.find((x) => x.coachName === coach)?.classCode
+    if (cls) fetchCoaches([{ coach, cls }])
+  }, [coach, chart, details, coachFailed, fetchCoaches])
 
   const span: Interval | null = useMemo(() => {
     if (!model) return null
@@ -368,7 +462,7 @@ export default function App() {
             <b>{err.title}</b>
             <p>{err.body}</p>
             {err.body !== error && <p className="muted tiny">Details: {error}</p>}
-            {lastTried.current && (
+            {err && (
               <button className="retry-btn" onClick={() => lastTried.current && load(lastTried.current, { keepSelection: !!chart })} disabled={loading}>
                 {loading ? <span className="spinner dark" /> : 'Try again'}
               </button>
@@ -492,6 +586,20 @@ export default function App() {
                       <small className="muted">{CLASS_NAMES[coachCls]}</small>
                     </h3>
                     <div className="coach-stats">
+                      {coachLoading.has(coach) && !details[coach] && (
+                        <span className="stat" title="Loading this coach's chart from IRCTC">
+                          <span className="spinner dark" /> chart
+                        </span>
+                      )}
+                      {coachFailed.has(coach) && !details[coach] && (
+                        <button
+                          className="stat retry-stat"
+                          title="Couldn't load this coach's chart. Free/booked still shows from the vacancy list."
+                          onClick={() => setCoachFailed((s) => new Set([...s].filter((x) => x !== coach)))}
+                        >
+                          ↻ Retry chart
+                        </button>
+                      )}
                       <span className="stat good">{coachFree} free</span>
                       {span && <span className="stat warn">{coachPartial} partly</span>}
                     </div>

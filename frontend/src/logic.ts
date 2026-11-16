@@ -24,7 +24,7 @@ export interface Model {
   stations: string[]
   names: Record<string, string>
   /** custom = typed by user, schedule = from HAR, coaches = from full coach charts (exact), guess = inferred */
-  routeSource: 'custom' | 'schedule' | 'coaches' | 'guess'
+  routeSource: 'custom' | 'schedule' | 'saved' | 'coaches' | 'guess'
   idx: Map<string, number>
   coaches: CoachInfo[]
   /** coach -> berthNo -> Berth (only berths that have any vacancy) */
@@ -53,10 +53,36 @@ export function orderStations(edges: [string, string][], hints: string[] = []): 
     indeg.set(b, indeg.get(b)! + 1)
   }
 
+  // Edges only fix part of the order. Where they don't, follow the hint order, and place stations the hints
+  // don't mention between their known neighbours (estimated position), so one unknown station can't drag a
+  // far-away hinted station ahead of its turn.
+  const est = new Map<string, number>()
+  hints.forEach((h, i) => !est.has(h) && est.set(h, i))
+  const fixed = new Set(est.keys())
+  for (let round = 0; round < 8; round++) {
+    const lo = new Map<string, number>()
+    const hi = new Map<string, number>()
+    for (const [a, set] of out)
+      for (const b of set) {
+        if (est.has(a) && !fixed.has(b)) lo.set(b, Math.max(lo.get(b) ?? -Infinity, est.get(a)!))
+        if (est.has(b) && !fixed.has(a)) hi.set(a, Math.min(hi.get(a) ?? Infinity, est.get(b)!))
+      }
+    let changed = false
+    for (const s of seen.keys()) {
+      if (fixed.has(s)) continue
+      const l = lo.get(s)
+      const h = hi.get(s)
+      const v = l !== undefined && h !== undefined ? (l + h) / 2 : l !== undefined ? l + 0.5 : h !== undefined ? h - 0.5 : undefined
+      if (v !== undefined && v !== est.get(s)) (est.set(s, v), (changed = true))
+    }
+    if (!changed) break
+  }
+  const rank = (s: string) => est.get(s) ?? hints.length + seen.get(s)!
+
   const order: string[] = []
   const ready = [...seen.keys()].filter((s) => indeg.get(s) === 0)
   while (ready.length) {
-    ready.sort((x, y) => seen.get(x)! - seen.get(y)!)
+    ready.sort((x, y) => rank(x) - rank(y) || seen.get(x)! - seen.get(y)!)
     const s = ready.shift()!
     order.push(s)
     for (const n of out.get(s)!) {
@@ -123,6 +149,9 @@ export function buildModel(
   chart: ChartResponse,
   routeOverride: string[] | null,
   details: Record<string, CoachDetail>,
+  /** Stop order known in advance (earlier exact route, or timetable). Only breaks ties, so bad data can't
+   *  create loops; an exact route also contributes its stations. */
+  known: { stations: string[]; source: 'exact' | 'timetable' } | null = null,
 ): Model {
   const comp = chart.composition
   const all = Object.values(chart.vacant).flatMap((v) => v ?? [])
@@ -139,7 +168,7 @@ export function buildModel(
     chart.stations.forEach((s) => s.stationName && (names[s.stationCode] = s.stationName))
     routeSource = 'schedule'
   } else {
-    routeSource = detailBerths.length ? 'coaches' : 'guess'
+    routeSource = detailBerths.length ? 'coaches' : known?.source === 'exact' ? 'saved' : known ? 'schedule' : 'guess'
     const edges: [string, string][] = []
     // Full berth chains (A→B→C…) from coach charts give the exact order; add them first.
     for (const b of detailBerths) b.segs.forEach((s) => edges.push([s.from, s.to]))
@@ -148,7 +177,11 @@ export function buildModel(
       .filter((s): s is string => !!s)
       .filter((s, i, arr) => arr.indexOf(s) === i)
     for (let i = 0; i + 1 < chain.length; i++) edges.push([chain[i], chain[i + 1]])
-    stations = orderStations(edges, chain)
+    const seen = new Set(edges.flat())
+    const hint = known ? known.stations.filter((s) => known.source === 'exact' || seen.has(s)) : []
+    // Chain links are already edges; as hints they'd pin stations the timetable lacks (e.g. the next charting
+    // station) to the end, so use them only when nothing better is known.
+    stations = orderStations(edges, hint.length ? hint : chain)
     // Source first, destination last regardless of tie-breaks.
     const dest = comp.destinationStation || comp.to
     if (dest && stations.includes(dest)) stations = [...stations.filter((s) => s !== dest), dest]

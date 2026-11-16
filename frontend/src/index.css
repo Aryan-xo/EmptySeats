@@ -2178,3 +2178,78 @@ button.cta {
     margin-top: 16px;
   }
 }
+
+/* ---------- combo: browse toggle, stop numbers, footer ---------- */
+.combo.has-toggle input {
+  padding-right: 40px;
+}
+.combo-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  translate: 0 -50%;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.combo-toggle:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.combo-toggle svg {
+  transition: rotate 0.2s ease;
+}
+.combo-toggle.up svg {
+  rotate: 180deg;
+}
+.combo-idx {
+  flex: none;
+  min-width: 22px;
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.combo-list li.current b {
+  color: var(--accent);
+}
+.combo-list li.combo-footer {
+  position: sticky;
+  bottom: -6px;
+  margin: 4px -6px -6px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: #fafbff;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.combo-list li.combo-footer:hover {
+  background: var(--accent-soft);
+}
+
+.coach-stats .stat .spinner.dark {
+  width: 11px;
+  height: 11px;
+  vertical-align: -1px;
+  margin-right: 4px;
+}
+.stat.retry-stat {
+  border: 1px solid #f59e0b;
+  background: #fff;
+  color: var(--warn);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
